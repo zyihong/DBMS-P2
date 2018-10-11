@@ -597,7 +597,43 @@ public final class StudentFakebookOracle extends FakebookOracle {
                 UserInfo young = new UserInfo(80000000, "Neil", "deGrasse Tyson");
                 return new AgeInfo(old, young);
             */
-            return new AgeInfo(new UserInfo(-1, "UNWRITTEN", "UNWRITTEN"), new UserInfo(-1, "UNWRITTEN", "UNWRITTEN"));                // placeholder for compilation
+            /*
+            SELECT USER_ID, FIRST_NAME, LAST_NAME
+            FROM (
+                SELECT DISTINCT U2.YEAR_OF_BIRTH , U2.MONTH_OF_BIRTH , U2.DAY_OF_BIRTH , U2.USER_ID, U2.FIRST_NAME, U2.LAST_NAME
+                FROM USERS U1, USERS U2, FRIENDS F
+                WHERE U1.USER_ID = 745
+                AND (U1.USER_ID = F.USER1_ID AND U2.USER_ID = F.USER2_ID) OR (U1.USER_ID = F.USER2_ID AND U2.USER_ID = F.USER1_ID)
+                ORDER BY U2.YEAR_OF_BIRTH ASC, U2.MONTH_OF_BIRTH ASC, U2.DAY_OF_BIRTH ASC, U2.USER_ID DESC
+            )
+            WHERE ROWNUM <= 1;*/
+
+            ResultSet rst = stmt.executeQuery(
+                " SELECT USER_ID, FIRST_NAME, LAST_NAME " + 
+                " FROM ( SELECT DISTINCT U2.YEAR_OF_BIRTH , U2.MONTH_OF_BIRTH , U2.DAY_OF_BIRTH , U2.USER_ID, U2.FIRST_NAME, U2.LAST_NAME " + 
+                "        FROM " + UsersTable + " U1, " + UsersTable + " U2, " + FriendsTable + " F " + 
+                "        WHERE U1.USER_ID = " + userID + " AND U1.USER_ID <> U2.USER_ID " +
+                "        AND ((U1.USER_ID = F.USER1_ID AND U2.USER_ID = F.USER2_ID) OR (U1.USER_ID = F.USER2_ID AND U2.USER_ID = F.USER1_ID))" + 
+                "        ORDER BY U2.YEAR_OF_BIRTH ASC, U2.MONTH_OF_BIRTH ASC, U2.DAY_OF_BIRTH ASC, U2.USER_ID DESC)" + 
+                " WHERE ROWNUM <= 1 ");
+
+            rst.next();
+            UserInfo old = new UserInfo(rst.getInt(1), rst.getString(2), rst.getString(3));
+
+            ResultSet rst1 = stmt.executeQuery(
+                " SELECT USER_ID, FIRST_NAME, LAST_NAME " + 
+                " FROM ( SELECT DISTINCT U2.YEAR_OF_BIRTH , U2.MONTH_OF_BIRTH , U2.DAY_OF_BIRTH , U2.USER_ID, U2.FIRST_NAME, U2.LAST_NAME " + 
+                "        FROM " + UsersTable + " U1, " + UsersTable + " U2, " + FriendsTable + " F " + 
+                "        WHERE U1.USER_ID = " + userID + " AND U1.USER_ID <> U2.USER_ID " +
+                "        AND ((U1.USER_ID = F.USER1_ID AND U2.USER_ID = F.USER2_ID) OR (U1.USER_ID = F.USER2_ID AND U2.USER_ID = F.USER1_ID))" + 
+                "        ORDER BY U2.YEAR_OF_BIRTH DESC, U2.MONTH_OF_BIRTH DESC, U2.DAY_OF_BIRTH DESC, U2.USER_ID DESC)" + 
+                " WHERE ROWNUM <= 1 ");
+
+            rst1.next();
+            UserInfo young = new UserInfo(rst1.getInt(1), rst1.getString(2), rst1.getString(3));
+
+
+            return new AgeInfo(old, young);                // placeholder for compilation
         }
         catch (SQLException e) {
             System.err.println(e.getMessage());
