@@ -209,6 +209,31 @@ public final class StudentFakebookOracle extends FakebookOracle {
                 results.add(u1);
                 results.add(u2);
             */
+
+            /*
+            SELECT User_ID, First_Name, Last_Name 
+            FROM Users  
+            MINUS 
+            SELECT U1.User_ID, U1.First_Name, U1.Last_Name 
+            FROM Users U1, Friends F1 
+            WHERE U1.User_ID = F1.User1_ID OR U1.User_ID = F1.User2_ID);
+            */
+
+            ResultSet rst = stmt.executeQuery(
+                "(SELECT User_ID, First_Name, Last_Name " + 
+                "FROM " + UsersTable + " " + 
+                "MINUS " + 
+                "SELECT U1.User_ID, U1.First_Name, U1.Last_Name " +
+                "FROM " + UsersTable + " U1, " + FriendsTable + " F1 " +
+                "WHERE U1.User_ID = F1.User1_ID OR U1.User_ID = F1.User2_ID) " + 
+                "ORDER BY User_ID ASC ");
+
+            while (rst.next()) {
+                results.add(new UserInfo(rst.getLong(1), rst.getString(2), rst.getString(3)));
+            }
+
+            rst.close();
+            stmt.close();
         }
         catch (SQLException e) {
             System.err.println(e.getMessage());
@@ -243,6 +268,10 @@ public final class StudentFakebookOracle extends FakebookOracle {
             while (rst.next()) {
                 results.add(new UserInfo(rst.getInt(1), rst.getString(2), rst.getString(3)));
             }
+
+            rst.close();
+            stmt.close();
+
         }
         catch (SQLException e) {
             System.err.println(e.getMessage());
@@ -275,6 +304,48 @@ public final class StudentFakebookOracle extends FakebookOracle {
                 tp.addTaggedUser(u3);
                 results.add(tp);
             */
+            /*
+            SELECT PHOTO_ID, ALBUM_ID, PHOTO_LINK, ALBUM_NAME
+            FROM (
+                SELECT P.PHOTO_ID, P.ALBUM_ID, P.PHOTO_LINK, A.ALBUM_NAME, COUNT(P.PHOTO_ID) AS TAG_NUM
+                FROM PHOTOS P, TAGS T, ALBUMS A
+                WHERE P.PHOTO_ID = T.TAG_PHOTO_ID AND P.ALBUM_ID = A.ALBUM_ID
+                GROUP BY P.PHOTO_ID, P.ALBUM_ID, P.PHOTO_LINK, A.ALBUM_NAME
+                ORDER BY TAG_NUM DESC, P.PHOTO_ID ASC
+            )
+            WHERE ROWNUM <= 5
+            */
+            Statement stmt1 = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly);
+
+            ResultSet rst = stmt.executeQuery(
+                " SELECT PHOTO_ID, ALBUM_ID, PHOTO_LINK, ALBUM_NAME " + 
+                " FROM ( " +
+                "   SELECT P.PHOTO_ID, P.ALBUM_ID, P.PHOTO_LINK, A.ALBUM_NAME, COUNT(P.PHOTO_ID) AS TAG_NUM " + 
+                "   FROM " + PhotosTable + " P, " + TagsTable + " T, " + AlbumsTable + " A " +
+                "   WHERE P.PHOTO_ID = T.TAG_PHOTO_ID AND P.ALBUM_ID = A.ALBUM_ID " +
+                "   GROUP BY P.PHOTO_ID, P.ALBUM_ID, P.PHOTO_LINK, A.ALBUM_NAME " +
+                "   ORDER BY TAG_NUM DESC, P.PHOTO_ID ASC) " +
+                " WHERE ROWNUM <= " + num);
+
+            while (rst.next()) {
+                PhotoInfo p = new PhotoInfo(rst.getInt(1), rst.getInt(2), rst.getString(3), rst.getString(4));
+                TaggedPhotoInfo tp = new TaggedPhotoInfo(p);
+                ResultSet rst1 = stmt1.executeQuery(
+                    " SELECT U.User_ID, U.First_Name, U.Last_Name " + 
+                    " FROM " + UsersTable + " U, " + TagsTable + " T, " + PhotosTable + " P " +
+                    " WHERE U.User_ID = T.TAG_SUBJECT_ID AND P.PHOTO_ID = T.TAG_PHOTO_ID " + 
+                    " AND P.PHOTO_ID = " + rst.getInt(1) + 
+                    " ORDER BY U.User_ID ASC");
+                while (rst1.next()) {
+                    tp.addTaggedUser(new UserInfo(rst1.getInt(1), rst1.getString(2), rst1.getString(3)));
+                }
+                results.add(tp);
+            }
+
+            stmt1.close();
+
+            rst.close();
+            stmt.close();
         }
         catch (SQLException e) {
             System.err.println(e.getMessage());
@@ -343,6 +414,9 @@ public final class StudentFakebookOracle extends FakebookOracle {
                 results.add(mp);
                 count = count + 1;
             }
+
+            rst.close();
+            stmt.close();
         }
         catch (SQLException e) {
             System.err.println(e.getMessage());
@@ -373,6 +447,85 @@ public final class StudentFakebookOracle extends FakebookOracle {
                 up.addSharedFriend(u3);
                 results.add(up);
             */
+
+            /*
+            SELECT USER1_ID, USER2_ID, USER_NUM
+            FROM (
+                SELECT U1.USER_ID AS USER1_ID, U3.USER_ID AS USER2_ID, COUNT(U1.USER_ID) AS USER_NUM
+                FROM USERS U1, USERS U2, USERS U3, FRIENDS F1, FRIENDS F2
+                WHERE U1.USER_ID < U3.USER_ID 
+                AND ((U1.USER_ID = F1.USER1_ID AND U2.USER_ID = F1.USER2_ID) OR (U1.USER_ID = F1.USER2_ID AND U2.USER_ID = F1.USER1_ID))
+                AND ((U3.USER_ID = F2.USER1_ID AND U2.USER_ID = F2.USER2_ID) OR (U3.USER_ID = F2.USER2_ID AND U2.USER_ID = F2.USER1_ID))
+                AND NOT EXISTS (
+                    SELECT F3.USER1_ID
+                    FROM FRIENDS F3
+                    WHERE F3.USER1_ID = U1.USER_ID AND U3.USER_ID = F3.USER2_ID)
+                GROUP BY U1.USER_ID, U3.USER_ID
+                ORDER BY USER_NUM DESC, U1.USER_ID ASC, U3.USER_ID ASC)
+            WHERE ROWNUM <= 5;
+
+            SELECT USER1_ID, USER1_FN, USER1_LN, USER2_ID, USER2_FN, USER2_LN 
+            FROM (
+                SELECT U1.USER_ID AS USER1_ID, U1.First_Name AS USER1_FN, U1.Last_Name AS USER1_LN, U3.USER_ID AS USER2_ID, 
+                       U3.First_Name AS USER2_FN, U3.Last_Name AS USER2_LN, COUNT(U1.USER_ID) AS USER_NUM 
+                FROM USERS U1, USERS U2, USERS U3, FRIENDS F1, FRIENDS F2
+                WHERE U1.USER_ID < U3.USER_ID 
+                AND ((U1.USER_ID = F1.USER1_ID AND U2.USER_ID = F1.USER2_ID) OR (U1.USER_ID = F1.USER2_ID AND U2.USER_ID = F1.USER1_ID))
+                AND ((U3.USER_ID = F2.USER1_ID AND U2.USER_ID = F2.USER2_ID) OR (U3.USER_ID = F2.USER2_ID AND U2.USER_ID = F2.USER1_ID))
+                AND NOT EXISTS (
+                    SELECT F3.USER1_ID
+                    FROM FRIENDS F3
+                    WHERE F3.USER1_ID = U1.USER_ID AND U3.USER_ID = F3.USER2_ID
+                )
+                GROUP BY U1.USER_ID, U1.First_Name, U1.Last_Name, U3.USER_ID, U3.First_Name, U3.Last_Name
+                ORDER BY USER_NUM DESC, U1.USER_ID ASC, U3.USER_ID ASC
+            )
+            WHERE ROWNUM <= 5;*/
+            Statement stmt1 = oracle.createStatement(FakebookOracleConstants.AllScroll, FakebookOracleConstants.ReadOnly);
+
+            ResultSet rst = stmt.executeQuery(
+                " SELECT USER1_ID, USER1_FN, USER1_LN, USER2_ID, USER2_FN, USER2_LN " + 
+                " FROM ( " +
+                "   SELECT U1.USER_ID AS USER1_ID, U1.First_Name AS USER1_FN, U1.Last_Name AS USER1_LN, U3.USER_ID AS USER2_ID, " + 
+                "          U3.First_Name AS USER2_FN, U3.Last_Name AS USER2_LN, COUNT(U1.USER_ID) AS USER_NUM " + 
+                "   FROM " + UsersTable + " U1, " + UsersTable + " U2, " + UsersTable + " U3, " + FriendsTable + " F1, " + FriendsTable + " F2 " +
+                "   WHERE U1.USER_ID < U3.USER_ID " +
+                "   AND ((U1.USER_ID = F1.USER1_ID AND U2.USER_ID = F1.USER2_ID) OR (U1.USER_ID = F1.USER2_ID AND U2.USER_ID = F1.USER1_ID)) " +
+                "   AND ((U3.USER_ID = F2.USER1_ID AND U2.USER_ID = F2.USER2_ID) OR (U3.USER_ID = F2.USER2_ID AND U2.USER_ID = F2.USER1_ID)) " +
+                "   AND NOT EXISTS ( " +
+                "      SELECT F3.USER1_ID " +
+                "      FROM " + FriendsTable + " F3 " +
+                "      WHERE F3.USER1_ID = U1.USER_ID AND U3.USER_ID = F3.USER2_ID) " +
+                "   GROUP BY U1.USER_ID, U1.First_Name, U1.Last_Name, U3.USER_ID, U3.First_Name, U3.Last_Name " +
+                "   ORDER BY USER_NUM DESC, U1.USER_ID ASC, U3.USER_ID ASC) " +
+                " WHERE ROWNUM <= " + num);
+
+            while (rst.next()) {
+                UserInfo u1 = new UserInfo(rst.getInt(1), rst.getString(2), rst.getString(3));
+                UserInfo u2 = new UserInfo(rst.getInt(4), rst.getString(5), rst.getString(6));
+                UsersPair up = new UsersPair(u1, u2);
+
+                ResultSet rst1 = stmt1.executeQuery(
+                    " SELECT U2.USER_ID, U2.First_Name, U2.Last_Name " + 
+                    " FROM " + UsersTable + " U1, " + UsersTable + " U2, " + UsersTable + " U3, " + FriendsTable + " F1, " + FriendsTable + " F2 " +
+                    " WHERE U1.User_ID = " + rst.getInt(1) + " AND U3.User_ID = " + rst.getInt(4) + 
+                    " AND ((U1.USER_ID = F1.USER1_ID AND U2.USER_ID = F1.USER2_ID) OR (U1.USER_ID = F1.USER2_ID AND U2.USER_ID = F1.USER1_ID)) " +
+                    " AND ((U3.USER_ID = F2.USER1_ID AND U2.USER_ID = F2.USER2_ID) OR (U3.USER_ID = F2.USER2_ID AND U2.USER_ID = F2.USER1_ID)) " +
+                    " ORDER BY U2.USER_ID ASC");
+
+                while (rst1.next()) {
+                    up.addSharedFriend(new UserInfo(rst1.getInt(1), rst1.getString(2), rst1.getString(3)));
+                }
+
+                results.add(up);
+
+            }
+
+            stmt1.close();
+
+            rst.close();
+            stmt.close();
+
         }
         catch (SQLException e) {
             System.err.println(e.getMessage());
@@ -416,6 +569,9 @@ public final class StudentFakebookOracle extends FakebookOracle {
             while (rst.next()) {
                 info.addState(rst.getString(1));
             }
+
+            rst.close();
+            stmt.close();
 
             return info;                // placeholder for compilation
         }
@@ -484,6 +640,9 @@ public final class StudentFakebookOracle extends FakebookOracle {
                 SiblingInfo si = new SiblingInfo(u1, u2);
                 results.add(si);
             }
+
+            rst.close();
+            stmt.close();
 
         }
         catch (SQLException e) {
